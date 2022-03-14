@@ -57,6 +57,15 @@ class User_SignUp(Schema):
     # date = fields.String(validate=validate.Regexp(r'^(19|20)\d\d[- /.](0[1-9]|1[012])[- /.](0[1-9]|[12][0-9]|3[01])$'))
 
 
+class PATIENT_PERSONAL_DETAILS(Schema):
+    # user_signupid = fields.String(validate=validate.Regexp(r'[A-Za-z0-9]+'))
+    username = fields.String(validate=validate.Regexp(r'[A-Za-z]+'))
+    email = fields.Email(required=True)
+    phone = fields.String(validate=validate.Regexp(r'^(?:(?:\+|0{0,2})91(\s*[\-]\s*)?|[0]?)?[789]\d{9}$'),
+                          required=True)
+    password = fields.String(validate=validate.Regexp(r'^[A-Za-z0-9@#$%^&+=]{8,32}'))
+
+
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -156,6 +165,74 @@ def User_signup():
             mysql.connection.commit()
             logging.info("successfully registered")
 
+            # return fun("successfully inserted", args, *kwargs), 201
+            return "Succesfully Inserted", 200
+        except ValidationError as e:
+            # logTo_database("/user/insert", "user_signup", e, 401)
+            return (e.messages), 400
+    return "Invalid input", 200
+
+@app.route('/new/user', methods=['POST'])
+def PATIENT_PERSONAL_DETAILS():
+    # @wraps()
+    # def wrappersUserSignup(*args, **kwargs):
+    if 'username' in request.json and 'email' in request.json \
+            and 'phone' in request.json and 'password' in request.json:
+        # Variables:
+        request_data = request.json
+        username = request_data['username']
+        email = request_data['email']
+        phone = request_data['phone']
+        password = request_data['password']
+        # date = request.json['date']
+
+        hassedpassword = generate_password_hash(password)
+        # userip = request_data['ip']
+        # ex = Faker()
+        # ip = ex.ipv4()
+        # print(ip)
+        # # date = request_data['date']
+        # device = socket.gethostname()
+        # print(device)
+
+        # UserId Pattern for Insert Operation:-
+        cursor = mysql.connection.cursor()
+        cursor.execute("SELECT PATIENT_ID FROM PATIENT_PERSONAL_DETAILS")
+        last_user_id = cursor.rowcount
+        print('----------------------------------')
+        print("Last Inserted ID is: " + str(last_user_id))
+        pattern = 'PA000'  # pattern = ooo
+        last_user_id += 1
+        # add_value = 00
+        # pattern += 1 # pattern incremnting always by 1:-
+        user_id = pattern + str(last_user_id)  # pass 'user_id' value in place holder exactly
+        # User Id pattern Code End #
+
+        # Cursor:-
+        cursor = mysql.connection.cursor()
+        cursor.execute('SELECT * FROM PATIENT_PERSONAL_DETAILS WHERE PATIENT_MAIL_ID = %s OR PATIENT_PHONE_NUMBER = %s',
+                       (email, phone))
+        account = cursor.fetchone()
+
+        if account and account[3] == email:
+            return 'Your Email already exist please enter new Email !', 400
+
+        elif account and account[4] == phone:
+            return "Your Phone number is duplicate please enter new number!!!", 400
+
+        # elif account:
+        #     return fun(account, args, *kwargs)
+
+        result = User_SignUp()
+        try:
+            # Validate request body against schema data types
+            result.load(request_data)
+            cur = mysql.connection.cursor()
+            cur.execute(
+                "insert into PATIENT_PERSONAL_DETAILS(PATIENT_ID, PATIENT_NAME, PATIENT_MAIL_ID, PATIENT_PHONE_NUMBER, PATIENT_PASSWORD) VALUES(%s, %s, %s, %s, %s)",
+                (user_id, username, email, phone, hassedpassword))
+            mysql.connection.commit()
+            logging.info("successfully registered")
             # return fun("successfully inserted", args, *kwargs), 201
             return "Succesfully Inserted", 200
         except ValidationError as e:
@@ -263,7 +340,7 @@ def login():
         pw = request.json["password"]
         logging.warning('Watch out!')
         cur = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
-        cur.execute("select * from PATIENT_SIGNUP WHERE (PATIENT_MAIL_ID = %s )", (email,))
+        cur.execute("select * from PATIENT_PERSONAL_DETAILS WHERE (PATIENT_MAIL_ID = %s )", (email,)) # PATIENT_PERSONAL_DETAILS, PATIENT_SIGNUP
         details = cur.fetchone()
         if details is None:
             return ({"message": "No details"}), 401
@@ -277,9 +354,7 @@ def login():
             return "successfully login"
         else:
             logging.error("Invalid credentials")
-
         return ({"Error": "invalid credentials"}), 401
-
     return "Insufficient parameters", 400
 
 
@@ -312,58 +387,58 @@ def logout():
 # AMB_BOOKING
 @app.route('/amb/booking', methods=["POST"])
 def book():
-    if 'situation_type' in request.json and 'cause_type' in request.json \
-            and 'amb_type' in request.json and "price" in request.json and "advance_type_or_basic" in request.json:
+    if 'loggedin' in session:
+        if 'situation_type' in request.json and 'cause_type' in request.json \
+                and 'amb_type' in request.json and "price" in request.json and "advance_type_or_basic" in request.json:
 
-        patient_id = session['PATIENT_ID']
-        situation_type = request.json["situation_type"]
-        amb_type = request.json["amb_type"]
-        advance_name_or_basic = request.json["advance_type_or_basic"]
-        # basictype_name = request.json["basictype_name"]
-        price = request.json["price"]
-        cause = request.json["cause_type"]
+            patient_id = session['PATIENT_ID']
+            situation_type = request.json["situation_type"]
+            amb_type = request.json["amb_type"]
+            advance_name_or_basic = request.json["advance_type_or_basic"]
+            price = request.json["price"]
+            cause = request.json["cause_type"]
 
-        try:
-            cur = mysql.connection.cursor()
-            cur.execute("select SITUATION_ID from AMB_SITUATIONS where (SITUATION_TYPE = %s)", (situation_type,))
-            data1 = cur.fetchone()
-            if data1 is None:
-                return "No details in account"
-            cur = mysql.connection.cursor()
-            cur.execute("select AMB_TYPE_ID from AMB_AMBULANCE_TYPES where (AMB_TYPE = %s)", (amb_type,))
-            data2 = cur.fetchone()
-            if data2 is None:
-                return "No data in your account"
-            cur = mysql.connection.cursor()
-            cur.execute("select BASIC_TYPE_ID from AMB_BASIC_TYPES where (BASIC_TYPE_NAME = %s)",
-                        (advance_name_or_basic,))
-            data3 = cur.fetchone()
-            if data3 is None:
+            try:
                 cur = mysql.connection.cursor()
-                cur.execute("select ADVANCED_TYPE_ID from AMB_ADVANCED_TYPES where (ADVANCED_TYPE_NAME = %s)",
+                cur.execute("select SITUATION_ID from AMB_SITUATIONS where (SITUATION_TYPE = %s)", (situation_type,))
+                data1 = cur.fetchone()
+                if data1 is None:
+                    return "No details in account"
+                cur = mysql.connection.cursor()
+                cur.execute("select AMB_TYPE_ID from AMB_AMBULANCE_TYPES where (AMB_TYPE = %s)", (amb_type,))
+                data2 = cur.fetchone()
+                if data2 is None:
+                    return "No data in your account"
+                cur = mysql.connection.cursor()
+                cur.execute("select BASIC_TYPE_ID from AMB_BASIC_TYPES where (BASIC_TYPE_NAME = %s)",
                             (advance_name_or_basic,))
                 data3 = cur.fetchone()
                 if data3 is None:
+                    cur = mysql.connection.cursor()
+                    cur.execute("select ADVANCED_TYPE_ID from AMB_ADVANCED_TYPES where (ADVANCED_TYPE_NAME = %s)",
+                                (advance_name_or_basic,))
+                    data3 = cur.fetchone()
+                    if data3 is None:
+                        return "No data in your account"
+                cur = mysql.connection.cursor()
+                cur.execute("select CAUSE_ID from AMB_CAUSES where (CAUSE_TYPE = %s)", (cause,))
+                data5 = cur.fetchone()
+                if data5 is None:
                     return "No data in your account"
-            cur = mysql.connection.cursor()
-            cur.execute("select CAUSE_ID from AMB_CAUSES where (CAUSE_TYPE = %s)", (cause,))
-            data5 = cur.fetchone()
-            if data5 is None:
-                return "No data in your account"
 
-            cur = mysql.connection.cursor()
-            cur.execute(
-                "insert into AMB_BOOKING(PATIENT_ID,SITUATION_ID, AMB_TYPE_ID, BASIC_OR_ADVANCE, CAUSE_ID, PRICE)"
-                "values(%s,%s,%s,%s,%s,%s)", (patient_id, data1, data2, data3, data5, price))
+                cur = mysql.connection.cursor()
+                cur.execute(
+                    "insert into AMB_BOOKING(PATIENT_ID,SITUATION_ID, AMB_TYPE_ID, BASIC_OR_ADVANCE, CAUSE_ID, PRICE)"
+                    "values(%s,%s,%s,%s,%s,%s)", (patient_id, data1, data2, data3, data5, price))
 
-            mysql.connection.commit()
-            return "successfully inserted", 200
-        except ValidationError as e:
-            print(e)
-        return jsonify(e.messages)
+                mysql.connection.commit()
+                return "successfully inserted", 200
+            except ValidationError as e:
+                print(e)
+            return jsonify(e.messages)
 
-    return "invalid parameters"
-
+        return "invalid parameters"
+    return "User not loggedin, please login first"
 
 # DOC_BOOKING
 @app.route("/doc/booking", methods=["POST"])
@@ -512,13 +587,13 @@ def brain_disease():
             medications = request.json['medications']
             try:
                 cur = mysql.connection.cursor()
-                cur.execute("select BRAIN_DISEASES_ID from brain_diseases where (BRAIN_DISEASE_NAME = %s)",
+                cur.execute("select BRAIN_DISEASES_ID from BRAIN_DISEASES_TYPES where (BRAIN_DISEASE_NAME = %s)",
                             (brain_disease,))
                 BrainDisease = cur.fetchone()
                 if BrainDisease is None:
                     return "No details in account"
                 cur = mysql.connection.cursor()
-                cur.execute("select BRAIN_DISEASES_SYMPTOMS_ID from brain_diseases_symptoms where (BRAIN_DISEASES_SYMPTOMS_NAME = %s)",
+                cur.execute("select BRAIN_DISEASES_SYMPTOMS_ID from BRAIN_DISEASE_SYMPTOM where (BRAIN_DISEASES_SYMPTOMS_NAME = %s)",
                             (brain_disease_symptom,))
                 BrainDiseaseSymptom = cur.fetchone()
                 if BrainDiseaseSymptom is None:
@@ -526,7 +601,7 @@ def brain_disease():
                 # Txn Table
                 cur = mysql.connection.cursor()
                 cur.execute(
-                    "insert into brain_disease(PATIENT_ID, BRAIN_DISEASE_ID, BRAIN_DISEASE_SYMPTON, MEDICATIONS) values(%s, %s, %s, %s)",
+                    "insert into BRAIN_DISEASE(PATIENT_ID, BRAIN_DISEASE_ID, BRAIN_DISEASE_SYMPTON, MEDICATIONS) values(%s, %s, %s, %s)",
                     (PATIENT_ID, BrainDisease, BrainDiseaseSymptom, medications))
                 mysql.connection.commit()
                 return "successfully inserted", 200
@@ -547,7 +622,7 @@ def kidney_disease():
             medications = request.json["medications"]
             try:
                 cur = mysql.connection.cursor()
-                cur.execute("select KIDNEY_DISEASE_SYMPTOMS_ID from kidney_disease_symptoms where (KIDNEY_DISEASE_SYMPTOMS_NAME = %s)",
+                cur.execute("select KIDNEY_DISEASE_SYMPTOMS_ID from KIDNEY_DISEASE_SYMPTOMS where (KIDNEY_DISEASE_SYMPTOMS_NAME = %s)",
                             (kidney_symptom,))
                 KidneySymptom = cur.fetchone()
                 if KidneySymptom is None:
@@ -555,7 +630,7 @@ def kidney_disease():
                 # Txn Table
                 cur = mysql.connection.cursor()
                 cur.execute(
-                    "insert into kidney_disease(PATIENT_ID, KIDNEY_SYMPTON_ID, KIDNEY_MEDICATIONS) values(%s, %s, %s)",
+                    "insert into KIDNEY_DISEASE(PATIENT_ID, KIDNEY_SYMPTON_ID, KIDNEY_MEDICATIONS) values(%s, %s, %s)",
                     (PATIENT_ID, KidneySymptom, medications))
                 mysql.connection.commit()
                 return "successfully inserted", 200
@@ -583,7 +658,7 @@ def health_issues():
 
             try:
                 cur = mysql.connection.cursor()
-                cur.execute("select ISSUE_ID from health_issuses where (ISSUE_NAME = %s)",
+                cur.execute("select ISSUE_ID from HEALTH_ISSUES where (ISSUE_NAME = %s)",
                             (issue_name,))
                 IssueName = cur.fetchone()
                 if IssueName is None:
@@ -591,7 +666,7 @@ def health_issues():
                 # Txn Table
                 cur = mysql.connection.cursor()
                 cur.execute(
-                    "insert into previous_health_issues(USER_ID, ISSUE_ID, TREATMENT_TAKEN_AT, SURGERIES, COMPLICATIONS_DURING_TREATMENT, MEDICATIONS, LIST_ANY_ALLERGIESTO_MEDICATIONS) values(%s, %s, %s, %s, %s, %s, %s)",
+                    "insert into PREVIOUS_HEALTH_ISSUES(USER_ID, ISSUE_ID, TREATMENT_TAKEN_AT, SURGERIES, COMPLICATIONS_DURING_TREATMENT, MEDICATIONS, LIST_ANY_ALLERGIESTO_MEDICATIONS) values(%s, %s, %s, %s, %s, %s, %s)",
                     (PATIENT_ID, IssueName, TREATMENT_TAKEN_AT, SURGERIES, COMPLICATIONS_DURING_TREATMENT, MEDICATIONS, LIST_ANY_ALLERGIESTO_MEDICATIONS))
                 mysql.connection.commit()
                 return "successfully inserted", 200
@@ -604,7 +679,13 @@ def health_issues():
 # MAIN app To Run the Flask Script:-
 if __name__ == "__main__":
     app.run(debug=True)
+
     # app.run(host="0.0.0.0", port=8080, debug=True)
 
 # ALTER TABLE `dbim4u0mfuramq`.`PATIENT_SIGNUP`
 # CHANGE COLUMN `PATIENT_MAIL_ID` `PATIENT_MAIL_ID` VARCHAR(40) NULL DEFAULT NULL ;
+
+
+
+
+
